@@ -1,6 +1,5 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
-#include <stdio.h>
 
 #define GPIO_ON 1
 #define GPIO_OFF 0
@@ -20,9 +19,13 @@
 #define DIGIT_3 9
 #define DIGIT_4 10
 
-#define SENSOR 11
+// Pin mapping of sensor
+#define SENSOR 14
 
-// 7-segment display numbers representation
+// Delay between reading sensor values
+#define DELAY_MS 1000
+
+// 7-segment display numbers representation for common anode display
 uint8_t numbers[10] = {
     0b11000000, // 0
     0b11111001, // 1
@@ -48,38 +51,58 @@ void display_digit(uint8_t digit, uint8_t num) {
     }
 }
 
+// Converts an integer to an array of digits which can be displayed
 void int_to_digits(int num, uint8_t digits[4]) {
     for (int i = 0; i < 4; i++) {
-        digits[i] = num % 10;
+        digits[3 - i] = num % 10;
         num /= 10;
     }
 }
 
 int main() {
-    // Initialize display pins as outputs
-    stdio_init_all();
+    // Initialize sensor pin as input
     gpio_init(SENSOR);
     gpio_set_dir(SENSOR, GPIO_IN);
 
+    // Initialize display pins as outputs
     for (int i = 0; i < 11; i++) {
         gpio_init(i);
         gpio_set_dir(i, GPIO_OUT);
     }
 
+    // Initialize variables
     int count = 0;
+    uint32_t last_press_time = 0;
     uint8_t digits[4];
+    bool sensor_value, is_disabled = false;
     int_to_digits(count, digits);
 
     while (true) {
+        // Display the current number
         for (int i = 0; i < 4; i++) {
             display_digit(i, digits[i]);
             sleep_ms(2);
         }
 
-        int sensor_value = gpio_get(SENSOR);
+        // Read the sensor value
+        sensor_value = gpio_get(SENSOR);
 
-        printf("Sensor Value: %d\n", sensor_value);
+        // Check if the sensor is pressed and the switch is enabled
+        if (sensor_value && !is_disabled) {
+            // Increment the count    
+            int_to_digits(++count, digits);
 
-        sleep_ms(200);
+            // Save the time of the last press
+            last_press_time = to_ms_since_boot(get_absolute_time());
+
+            // Disable the switch
+            is_disabled = true;
+        }
+
+        // Check if the switch is disabled and if the delay has passed
+        if (is_disabled && (to_ms_since_boot(get_absolute_time()) - last_press_time >= DELAY_MS)) {
+            // Re-enable the switch
+            is_disabled = false;
+        }
     }
 }
