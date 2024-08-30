@@ -7,25 +7,17 @@
 #define GPIO_ON 1
 #define GPIO_OFF 0
 
-// Pin mapping of digits
+// Pin mapping
 #define DIGIT_1 7
 #define DIGIT_2 8
 #define DIGIT_3 9
 #define DIGIT_4 10
-
-// Pin mapping of sensor
 #define SENSOR 14
-
-// Pin mapping of reset button
 #define RESET 15
 
-// Delay between reading sensor values
-#define DELAY_MS 1000
-
-//  Flash memmory offset on which count value is stored
+// Define constant values
+#define SENSOR_DELAY_MS 1000
 #define FLASH_TARGET_OFFSET (256 * 1024)
-
-// Unique identifier
 #define MAGIC_NUMBER 0x12345678
 
 typedef struct {
@@ -124,10 +116,10 @@ int main() {
     if (read_int_from_flash(&count) == 0) {
         count = 0;
     }
-    uint32_t last_press_time = 0;
+    uint32_t sensor_press_time = 0, reset_press_time = 0;
     uint8_t digits[4];
-    bool sensor_value, is_disabled = false;
-    int_to_digits(count, digits);
+    bool sensor_value, reset_pressed, sensor_is_disabled = false, reset_was_pressed = false;
+    int_to_digits(count, digits);int_to_digits(++count, digits);
 
     while (true) {
         // Display the current number
@@ -136,26 +128,49 @@ int main() {
             sleep_ms(2);
         }
 
+
+        // Reset the counter if reset button is pressed for 5 seconds
+        reset_pressed = gpio_get(RESET);
+
+        if (reset_pressed && !reset_was_pressed) {
+            reset_press_time = to_ms_since_boot(get_absolute_time());
+            reset_was_pressed = true;
+        }
+        else if (reset_pressed && reset_was_pressed) {
+            uint32_t current_time = to_ms_since_boot(get_absolute_time());
+            if (current_time - reset_press_time >= 5000) {
+                count = 0;
+                int_to_digits(count, digits);
+                reset_was_pressed = false;
+            }
+        }
+
+        else if (!reset_pressed) {
+            reset_was_pressed = false;
+        }
+
         // Read the sensor value
         sensor_value = gpio_get(SENSOR);
 
         // Check if the sensor is pressed and the switch is enabled
-        if (sensor_value && !is_disabled) {
+        if (sensor_value && !sensor_is_disabled) {
             // Increment the count    
             int_to_digits(++count, digits);
             write_int_to_flash((count));
 
             // Save the time of the last press
-            last_press_time = to_ms_since_boot(get_absolute_time());
+            sensor_press_time = to_ms_since_boot(get_absolute_time());
 
             // Disable the switch
-            is_disabled = true;
+            sensor_is_disabled = true;
         }
 
         // Check if the switch is disabled and if the delay has passed
-        if (is_disabled && (to_ms_since_boot(get_absolute_time()) - last_press_time >= DELAY_MS)) {
+        if (sensor_is_disabled && (to_ms_since_boot(get_absolute_time()) - sensor_press_time >= SENSOR_DELAY_MS)) {
             // Re-enable the switch
-            is_disabled = false;
+            sensor_is_disabled = false;
         }
+
+        sleep_ms(10);
     }
 }
