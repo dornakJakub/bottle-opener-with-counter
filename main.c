@@ -1,17 +1,11 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
+#include "hardware/flash.h"
+#include "hardware/sync.h"
+#include <stdio.h>
 
 #define GPIO_ON 1
 #define GPIO_OFF 0
-
-// Pin mapping of segments
-#define SEG_A 0
-#define SEG_B 1
-#define SEG_C 2
-#define SEG_D 3
-#define SEG_E 4
-#define SEG_F 5
-#define SEG_G 6
 
 // Pin mapping of digits
 #define DIGIT_1 7
@@ -22,8 +16,55 @@
 // Pin mapping of sensor
 #define SENSOR 14
 
+// Pin mapping of reset button
+#define RESET 15
+
 // Delay between reading sensor values
 #define DELAY_MS 1000
+
+//  Flash memmory offset on which count value is stored
+#define FLASH_TARGET_OFFSET (256 * 1024)
+
+// Unique identifier
+#define MAGIC_NUMBER 0x12345678
+
+typedef struct {
+    uint32_t magic;
+    int value;
+} flash_data_t;
+
+
+// Function to read the count from flash memory
+int read_int_from_flash(int *out_value) {
+    const flash_data_t *flash_data = (const flash_data_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
+
+    // Check if the magic number matches
+    if (flash_data->magic == MAGIC_NUMBER) {
+        *out_value = flash_data->value;
+        return 1;  // Data exists and is valid
+    }
+
+    return 0;  // Data does not exist
+}
+
+// Function to write the count to flash memory
+void write_int_to_flash(int value) {
+    uint32_t ints = save_and_disable_interrupts();
+
+    flash_data_t data_to_store;
+    data_to_store.magic = MAGIC_NUMBER;
+    data_to_store.value = value;
+
+    uint8_t buffer[FLASH_PAGE_SIZE] = {0};
+    memcpy(buffer, &data_to_store, sizeof(flash_data_t));
+
+    flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
+
+    flash_range_program(FLASH_TARGET_OFFSET, buffer, FLASH_PAGE_SIZE);
+
+    restore_interrupts(ints);
+}
+
 
 // 7-segment display numbers representation for common anode display
 uint8_t numbers[10] = {
@@ -59,7 +100,7 @@ void int_to_digits(int num, uint8_t digits[4]) {
     }
 }
 
-int main() {
+void pin_init() {
     // Initialize sensor pin as input
     gpio_init(SENSOR);
     gpio_set_dir(SENSOR, GPIO_IN);
@@ -70,8 +111,19 @@ int main() {
         gpio_set_dir(i, GPIO_OUT);
     }
 
+    // Initialize reset button
+    gpio_init(RESET);
+    gpio_set_dir(RESET, GPIO_IN);
+}
+
+int main() {
+    pin_init();
+
     // Initialize variables
-    int count = 0;
+    int count;
+    if (read_int_from_flash(&count) == 0) {
+        count = 0;
+    }
     uint32_t last_press_time = 0;
     uint8_t digits[4];
     bool sensor_value, is_disabled = false;
@@ -91,6 +143,7 @@ int main() {
         if (sensor_value && !is_disabled) {
             // Increment the count    
             int_to_digits(++count, digits);
+            write_int_to_flash((count));
 
             // Save the time of the last press
             last_press_time = to_ms_since_boot(get_absolute_time());
