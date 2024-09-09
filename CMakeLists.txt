@@ -14,10 +14,12 @@ pico_sdk_init()
 
 add_executable(main
     main.c
+    flash.c
+    segment_display.c
 )
 
 # Pull in our pico_stdlib which pulls in commonly used features
-target_link_libraries(main pico_stdlib hardware_flash hardware_adc hardware_gpio)
+target_link_libraries(main pico_stdlib hardware_flash hardware_gpio)
 
 # Create map/bin/hex file etc.
 pico_add_extra_outputs(main)

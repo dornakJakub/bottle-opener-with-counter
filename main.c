@@ -1,17 +1,13 @@
 #include "pico/stdlib.h"
-#include "hardware/gpio.h"
-#include "hardware/flash.h"
-#include "hardware/sync.h"
-#include <stdio.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "segment_display.h"
+#include "flash.h"
 
 #define GPIO_ON 1
 #define GPIO_OFF 0
 
 // Pin mapping
-#define DIGIT_1 7
-#define DIGIT_2 8
-#define DIGIT_3 9
-#define DIGIT_4 10
 #define SENSOR 14
 #define RESET 15
 
@@ -19,99 +15,19 @@
 #define SENSOR_DELAY_MS 1000
 #define RESET_THRESHOLD 5000
 #define DISPLAY_TIME 8000
-#define FLASH_TARGET_OFFSET (256 * 1024)
-#define MAGIC_NUMBER 0x12345678
 
-typedef struct {
-    uint32_t magic;
-    int value;
-} flash_data_t;
+void init() {
+    display_init();
 
-
-// Function to read the count from flash memory
-int read_int_from_flash(int *out_value) {
-    const flash_data_t *flash_data = (const flash_data_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
-
-    // Check if the magic number matches
-    if (flash_data->magic == MAGIC_NUMBER) {
-        *out_value = flash_data->value;
-        return 1;  // Data exists and is valid
-    }
-
-    return 0;  // Data does not exist
-}
-
-// Function to write the count to flash memory
-void write_int_to_flash(int value) {
-    uint32_t ints = save_and_disable_interrupts();
-
-    flash_data_t data_to_store;
-    data_to_store.magic = MAGIC_NUMBER;
-    data_to_store.value = value;
-
-    uint8_t buffer[FLASH_PAGE_SIZE] = {0};
-    memcpy(buffer, &data_to_store, sizeof(flash_data_t));
-
-    flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
-
-    flash_range_program(FLASH_TARGET_OFFSET, buffer, FLASH_PAGE_SIZE);
-
-    restore_interrupts(ints);
-}
-
-
-// 7-segment display numbers representation for common anode display
-uint8_t numbers[10] = {
-    0b11000000, // 0
-    0b11111001, // 1
-    0b10100100, // 2
-    0b10110000, // 3
-    0b10011001, // 4
-    0b10010010, // 5
-    0b10000010, // 6
-    0b11111000, // 7
-    0b10000000, // 8
-    0b10010000  // 9
-};
-
-// Displays number num on digit digit
-void display_digit(uint8_t digit, uint8_t num) {
-    gpio_put(DIGIT_1, digit == 0);
-    gpio_put(DIGIT_2, digit == 1);
-    gpio_put(DIGIT_3, digit == 2);
-    gpio_put(DIGIT_4, digit == 3);
-
-    for (int i = 0; i < 7; i++) {
-        gpio_put(i, (numbers[num] >> i) & 1);
-    }
-}
-
-// Converts an integer to an array of digits which can be displayed
-void int_to_digits(int num, uint8_t digits[4]) {
-    for (int i = 0; i < 4; i++) {
-        digits[3 - i] = num % 10;
-        num /= 10;
-    }
-}
-
-void pin_init() {
-    // Initialize sensor pin as input
     gpio_init(SENSOR);
     gpio_set_dir(SENSOR, GPIO_IN);
 
-    // Initialize display pins as outputs
-    for (int i = 0; i < 11; i++) {
-        gpio_init(i);
-        gpio_set_dir(i, GPIO_OUT);
-    }
-
-    // Initialize reset button
     gpio_init(RESET);
     gpio_set_dir(RESET, GPIO_IN);
 }
 
 int main() {
-    pin_init();
+    init();
 
     // Initialize variables
     int count;
@@ -121,7 +37,7 @@ int main() {
     uint32_t sensor_press_time = 0, reset_press_time = 0, current_time;
     uint8_t digits[4];
     bool sensor_pressed, reset_pressed, sensor_is_disabled = false, reset_was_pressed = false;
-    int_to_digits(count, digits);int_to_digits(++count, digits);
+    int_to_digits(count, digits);
 
     while (true) {
         current_time = to_ms_since_boot(get_absolute_time());
