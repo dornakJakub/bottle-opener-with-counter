@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 // Display digit pins
-#define DIGIT_1 7
-#define DIGIT_2 8
-#define DIGIT_3 9
-#define DIGIT_4 10
+#define DIGIT_1 8
+#define DIGIT_2 9
+#define DIGIT_3 10
+#define DIGIT_4 11
 
 // Displays number onto chosen digin
 void display_digit(uint8_t digit, uint8_t num);

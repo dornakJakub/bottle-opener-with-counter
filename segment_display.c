@@ -19,7 +19,7 @@ uint8_t numbers[10] = {
 
 // Initialize display pins as outputs
 void display_init() {
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < 12; i++) {
         gpio_init(i);
         gpio_set_dir(i, GPIO_OUT);
     }
